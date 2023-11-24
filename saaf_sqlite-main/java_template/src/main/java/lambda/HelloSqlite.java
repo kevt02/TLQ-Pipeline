@@ -24,7 +24,7 @@ import java.util.UUID;
  * @author Robert Cordingly
  */
 public class HelloSqlite implements RequestHandler<Request, HashMap<String, Object>> {
-        //just add something i don't know
+        
     /**
      * Lambda Function Handler
      * 
@@ -40,6 +40,7 @@ public class HelloSqlite implements RequestHandler<Request, HashMap<String, Obje
         //Collect inital data.
         Inspector inspector = new Inspector();
         inspector.inspectAll();
+        String argument;
         
         //****************START FUNCTION IMPLEMENTATION*************************
         //Add custom key/value attribute to SAAF's output. (OPTIONAL)
