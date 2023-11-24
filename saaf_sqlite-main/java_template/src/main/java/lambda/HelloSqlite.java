@@ -24,7 +24,7 @@ import java.util.UUID;
  * @author Robert Cordingly
  */
 public class HelloSqlite implements RequestHandler<Request, HashMap<String, Object>> {
-
+        //just add something i don't know
     /**
      * Lambda Function Handler
      * 
