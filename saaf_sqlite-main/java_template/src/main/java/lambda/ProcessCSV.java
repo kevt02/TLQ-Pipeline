@@ -36,37 +36,44 @@ public class ProcessCSV implements RequestHandler<Request, HashMap<String, Objec
         
     //**START FUNCTION IMPLEMENTATION**
 
-        int row = request.getRow();
-        int col = request.getCol();
+//        int row = request.getRow();
+//        int col = request.getCol();
         String bucketname = request.getBucketname();
         String filename = request.getFilename();
         
-        long total = 0;
-        long elements = 0;
-        double avg = 0;
+        LambdaLogger logger = context.getLogger();
+        
+        logger.log("ProcessCSV bucketname:" + bucketname + " filename:" + filename);
+       
         
         AmazonS3 s3Client = AmazonS3ClientBuilder.standard().build();
         //get object file using source bucket and srcKey name
+        
         S3Object s3Object = s3Client.getObject(new GetObjectRequest(bucketname, filename));
         //get content of the file
         InputStream objectData = s3Object.getObjectContent();
         //scanning data line by line
         String text = "";
         Scanner scanner = new Scanner(objectData);
-        while (scanner.hasNext()) {
-            text += scanner.nextLine();
-            String[] singlerow = text.split(",");
-            for (String item : singlerow) {
-                total += Integer.parseInt(item);
-                elements++;
-            }
-        }
+        
+        String test = "";
+        test = scanner.nextLine();
+        System.out.print(test);
+        inspector.addAttribute("first csv: ", test);
+        
+//        while (scanner.hasNext()) {
+//            text += scanner.nextLine();
+//            String[] singlerow = text.split(",");
+//            for (String item : singlerow) {
+//                total += Integer.parseInt(item);
+//                elements++;
+//            }
+//        }
         scanner.close();
         
-        avg = total / elements;
         
-        LambdaLogger logger = context.getLogger();
-        logger.log("ProcessCSV bucketname:" + bucketname + " filename:" + filename + "avg-element:" + avg + " total:" + total);
+        
+        logger.log("ProcessCSV bucketname:" + bucketname + " filename:" + filename);
 
 
         //Add custom key/value attribute to SAAF's output. (OPTIONAL)
