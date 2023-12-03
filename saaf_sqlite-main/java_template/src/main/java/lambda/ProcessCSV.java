@@ -13,7 +13,6 @@ import com.amazonaws.services.s3.model.S3Object;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintWriter;
@@ -21,7 +20,9 @@ import java.nio.file.Files;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -29,77 +30,68 @@ import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Scanner;
 import java.util.concurrent.TimeUnit;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVPrinter;
 import saaf.Inspector;
 
+
+
 public class ProcessCSV implements RequestHandler<Request, HashMap<String, Object>> {
     
+ 
+        Connection connection;
         String bucketname;
         String filename;
+        List<ArrayList<String>> csvData;
 
     public HashMap<String, Object> handleRequest(Request request, Context context) {
-        
-        Inspector inspector = new Inspector();
-        inspector.inspectAll();
-        
-        bucketname = request.getBucketname();
-        filename = request.getFilename();
-        
-        LambdaLogger logger = context.getLogger();
-        logger.log("ProcessCSV bucketname:" + bucketname + " filename:" + filename);
-        
-        AmazonS3 s3Client = AmazonS3ClientBuilder.standard().build();
-        //get object file using source bucket and srcKey name
-        
-        S3Object s3Object = s3Client.getObject(new GetObjectRequest(bucketname, filename));
-        //get content of the file
-        InputStream objectData = s3Object.getObjectContent();
-        //scanning data line by line
-        String text = "";
-        
-        Scanner scanner = new Scanner(objectData);
-     
-        
-        List<ArrayList<String>> csvData = new ArrayList<>();
-        
-        
-        
-        while (scanner.hasNextLine()) {
-            String line = scanner.nextLine();
-            String[] row = line.split(",");
-            ArrayList<String> list = new ArrayList<>(Arrays.asList(row));
-            csvData.add(list);
-        }
-        
-        // Service #1 Transformations
-        transformData(csvData);
-        
-        writeCsvToS3(s3Client, csvData);
-        
-        loadIntoSQLite(csvData, s3Client);
+    Inspector inspector = new Inspector();
+    inspector.inspectAll();
+    
+    bucketname = request.getBucketname();
+    filename = request.getFilename();
+    
+    LambdaLogger logger = context.getLogger();
+    logger.log("ProcessCSV bucketname:" + bucketname + " filename:" + filename);
+    
+    AmazonS3 s3Client = AmazonS3ClientBuilder.standard().build();
 
-        // Further processing or storage logic can be added here
+    S3Object s3Object = s3Client.getObject(new GetObjectRequest(bucketname, filename));
+    InputStream objectData = s3Object.getObjectContent();
+    
+    csvData = new ArrayList<>();
+    
+    Scanner scanner = new Scanner(objectData);
 
-        scanner.close();
-
-        logger.log("ProcessCSV bucketname:" + bucketname + " filename:" + filename);
-
-        inspector.addAttribute("message", "Hello " + request.getBucketname() 
-                + "! This is an attribute added to the Inspector!");
-     
-        
-
-        Response response = new Response();
-        response.setValue("Bucket: " + bucketname + " filename:" + filename + " processed.");
-
-        inspector.consumeResponse(response);
-
-        inspector.inspectAllDeltas();
-        return inspector.finish();
+    while (scanner.hasNextLine()) {
+        String line = scanner.nextLine();
+        String[] row = line.split(",");
+        ArrayList<String> list = new ArrayList<>(Arrays.asList(row));
+        csvData.add(list);
     }
+
+    transformData(csvData);
+    writeCsvToS3(s3Client, csvData);
+    loadIntoSQLite(csvData, s3Client);
+
+    scanner.close();
+
+    logger.log("ProcessCSV bucketname:" + bucketname + " filename:" + filename);
+
+    inspector.addAttribute("message", "Hello " + request.getBucketname() 
+            + "! This is an attribute added to the Inspector!");
+
+    Response response = new Response();
+    response.setValue("Bucket: " + bucketname + " filename:" + filename + " processed.");
+
+    inspector.consumeResponse(response);
+
+    inspector.inspectAllDeltas();
+    return inspector.finish();
+}
 
     private void transformData(List<ArrayList<String>> csvData) {
         // Service #1 Transformations
@@ -260,46 +252,48 @@ public class ProcessCSV implements RequestHandler<Request, HashMap<String, Objec
 
 private void loadIntoSQLite(List<ArrayList<String>> csvData, AmazonS3 s3Client) {
     try {
-        // Create SQLite database file in the /tmp directory
         File databaseFile = new File("/tmp/sales.db");
 
-        // Connect to SQLite database
         Class.forName("org.sqlite.JDBC");
         String dbUrl = "jdbc:sqlite:" + databaseFile.getAbsolutePath();
 
-        try (Connection connection = DriverManager.getConnection(dbUrl)) {
-            // Disable auto-commit to perform a batch insert
-            connection.setAutoCommit(false);
+        // Establish the database connection
+        connection = DriverManager.getConnection(dbUrl);
+        connection.setAutoCommit(false);
 
-            // Create the Orders table if it does not exist
-            createOrdersTable(connection);
+        createOrdersTable(connection);
 
-            try (PreparedStatement preparedStatement = connection.prepareStatement(
-                    "INSERT INTO Orders (OrderID, Region, Country, ItemType, OrderProcessingTime, OrderPriority, GrossMargin) VALUES (?, ?, ?, ?, ?, ?, ?)"
-            )) {
-                // Iterate over CSV data and add batch inserts
-                for (ArrayList<String> row : csvData) {
-                    // Set values based on the structure of your CSV data
-                    preparedStatement.setString(1, row.get(6)); // Assuming OrderID is at index 6
-                    preparedStatement.setString(2, row.get(0)); // Assuming Region is at index 0
-                    preparedStatement.setString(3, row.get(1)); // Assuming Country is at index 1
-                    preparedStatement.setString(4, row.get(2)); // Assuming ItemType is at index 2
-                    preparedStatement.setDate(5, row.get(3)); // Assuming OrderProcessingTime is at the last index - 3
-                    preparedStatement.setString(6, row.get(4)); // Assuming OrderPriority is found by name
-                    preparedStatement.setDouble(7, Double.parseDouble(row.get(row.size() - 1))); // Assuming GrossMargin is at the last index
+        try (PreparedStatement preparedStatement = connection.prepareStatement(
+                "INSERT INTO Orders (Region, Country, ItemType, SalesChannel, OrderPriority, OrderDate, OrderID, ShipDate, UnitsSold, UnitPrice, UnitCost, TotalRevenue, TotalCost, TotalProfit, OrderProcessingTime, GrossMargin) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        )) {
+            for (int i = 1; i < csvData.size(); i++) {
+                ArrayList<String> row = csvData.get(i);
+                preparedStatement.setString(1, row.get(0)); // Region
+                preparedStatement.setString(2, row.get(1)); // Country
+                preparedStatement.setString(3, row.get(2)); // ItemType
+                preparedStatement.setString(4, row.get(3)); // SalesChannel
+                preparedStatement.setString(5, row.get(4)); // OrderPriority
+                preparedStatement.setString(6, row.get(5)); // OrderDate
+                preparedStatement.setString(7, row.get(6)); // OrderID
+                preparedStatement.setString(8, row.get(7)); // ShipDate
+                preparedStatement.setString(9, row.get(8)); // UnitsSold
+                preparedStatement.setString(10, row.get(9)); // UnitPrice
+                preparedStatement.setString(11, row.get(10)); // UnitCost
+                preparedStatement.setString(12, row.get(11)); // TotalRevenue
+                preparedStatement.setString(13, row.get(12)); // TotalCost
+                preparedStatement.setString(14, row.get(13)); // TotalProfit
+                preparedStatement.setString(15, row.get(14)); // OrderProcessingTime
+                preparedStatement.setString(16, row.get(15)); // GrossMargin
 
-                    preparedStatement.addBatch();
-                }
-
-                // Execute batch insert
-                preparedStatement.executeBatch();
-
-                // Commit the transaction
-                connection.commit();
+                preparedStatement.addBatch();
             }
-        }
 
-        // Upload SQLite database file to S3
+            preparedStatement.executeBatch();
+            connection.commit();
+        }
+        
+        connection.close(); // Close the connection
+
         uploadSQLiteToS3(s3Client, databaseFile);
 
     } catch (ClassNotFoundException | SQLException e) {
@@ -310,13 +304,22 @@ private void loadIntoSQLite(List<ArrayList<String>> csvData, AmazonS3 s3Client) 
 private void createOrdersTable(Connection connection) throws SQLException {
     try (PreparedStatement preparedStatement = connection.prepareStatement(
             "CREATE TABLE IF NOT EXISTS Orders (" +
-                    "OrderID TEXT PRIMARY KEY," +
                     "Region TEXT," +
                     "Country TEXT," +
                     "ItemType TEXT," +
-                    "OrderProcessingTime INTEGER," +
+                    "SalesChannel TEXT," +
                     "OrderPriority TEXT," +
-                    "GrossMargin REAL)"
+                    "OrderDate TEXT," +
+                    "OrderID TEXT PRIMARY KEY," +
+                    "ShipDate TEXT," +
+                    "UnitsSold TEXT," +
+                    "UnitPrice TEXT," +
+                    "UnitCost TEXT," +
+                    "TotalRevenue TEXT," +
+                    "TotalCost TEXT," +
+                    "TotalProfit TEXT," +
+                    "OrderProcessingTime TEXT," +
+                    "GrossMargin TEXT)"
     )) {
         preparedStatement.executeUpdate();
     }
@@ -333,7 +336,7 @@ private void uploadSQLiteToS3(AmazonS3 s3Client, File databaseFile) {
         metadata.setContentLength(contentBytes.length);
 
         PutObjectRequest putObjectRequest = new PutObjectRequest(
-                "your-s3-bucket", // Replace with your actual S3 bucket name
+                bucketname, // Replace with your actual S3 bucket name
                 "sales.db",
                 new ByteArrayInputStream(contentBytes),
                 metadata
@@ -346,6 +349,67 @@ private void uploadSQLiteToS3(AmazonS3 s3Client, File databaseFile) {
         e.printStackTrace();
     }
 }
+
+public Map<String, Object> processService3Request(Map<String, Object> request) {
+        // Assume the JSON request structure:
+        // {"filters": {"Region": "Australia and Oceania"}, "aggregations": ["avg(OrderProcessingTime)", "sum(TotalRevenue)"]}
+
+        Map<String, Object> response = new HashMap<String, Object>();
+        // Extract filters and aggregations from the JSON request
+        Map<String, String> filters = (Map<String, String>) request.get("filters");
+        List<String> aggregations = (List<String>) request.get("aggregations");
+
+        // Build SQL query dynamically based on filters and aggregations
+        String sql = buildSQLQuery(filters, aggregations);
+
+        // Execute the SQL query
+        try (Statement statement = connection.createStatement();
+             ResultSet resultSet = statement.executeQuery(sql)) {
+            // Process the query results and create a response
+            // You need to adapt this part based on your specific requirements
+            while (resultSet.next()) {
+                // Process each row and create a JSON object for the response
+                String region = resultSet.getString("Region");
+                double avgOrderProcessingTime = resultSet.getDouble("AVG(OrderProcessingTime)");
+                double totalRevenue = resultSet.getDouble("SUM(TotalRevenue)");
+
+                // Create a JSON object for the response
+                Map<String, Object> responseRow = Map.of(
+                        "Region", region,
+                        "AvgOrderProcessingTime", avgOrderProcessingTime,
+                        "TotalRevenue", totalRevenue
+                        // Add other aggregations as needed
+                );
+
+                // Add the response row to the overall response
+                // You may want to use a List<Map<String, Object>> for the response structure
+                response.put(region, responseRow);
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+
+        return response;
+    }
+
+    private String buildSQLQuery(Map<String, String> filters, List<String> aggregations) {
+        // Build the SQL query dynamically based on filters and aggregations
+        // You need to adapt this part based on your specific requirements
+        StringBuilder sqlBuilder = new StringBuilder("SELECT ");
+        for (String aggregation : aggregations) {
+            sqlBuilder.append(aggregation).append(", ");
+        }
+        // Remove the trailing comma
+        sqlBuilder.delete(sqlBuilder.length() - 2, sqlBuilder.length());
+        sqlBuilder.append(" FROM Orders WHERE ");
+        for (Map.Entry<String, String> filter : filters.entrySet()) {
+            sqlBuilder.append(filter.getKey()).append("='").append(filter.getValue()).append("' AND ");
+        }
+        // Remove the trailing "AND"
+        sqlBuilder.delete(sqlBuilder.length() - 5, sqlBuilder.length());
+
+        return sqlBuilder.toString();
+    }
 
 }
 
