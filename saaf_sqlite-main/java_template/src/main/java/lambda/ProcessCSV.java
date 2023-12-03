@@ -12,9 +12,16 @@ import com.amazonaws.services.s3.model.PutObjectResult;
 import com.amazonaws.services.s3.model.S3Object;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintWriter;
+import java.nio.file.Files;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -71,6 +78,8 @@ public class ProcessCSV implements RequestHandler<Request, HashMap<String, Objec
         transformData(csvData);
         
         writeCsvToS3(s3Client, csvData);
+        
+        loadIntoSQLite(csvData, s3Client);
 
         // Further processing or storage logic can be added here
 
@@ -246,4 +255,100 @@ public class ProcessCSV implements RequestHandler<Request, HashMap<String, Objec
             e.printStackTrace();
         }
     }
+     
+        
+
+private void loadIntoSQLite(List<ArrayList<String>> csvData, AmazonS3 s3Client) {
+    try {
+        // Create SQLite database file in the /tmp directory
+        File databaseFile = new File("/tmp/sales.db");
+
+        // Connect to SQLite database
+        Class.forName("org.sqlite.JDBC");
+        String dbUrl = "jdbc:sqlite:" + databaseFile.getAbsolutePath();
+
+        try (Connection connection = DriverManager.getConnection(dbUrl)) {
+            // Disable auto-commit to perform a batch insert
+            connection.setAutoCommit(false);
+
+            // Create the Orders table if it does not exist
+            createOrdersTable(connection);
+
+            try (PreparedStatement preparedStatement = connection.prepareStatement(
+                    "INSERT INTO Orders (OrderID, Region, Country, ItemType, OrderProcessingTime, OrderPriority, GrossMargin) VALUES (?, ?, ?, ?, ?, ?, ?)"
+            )) {
+                // Iterate over CSV data and add batch inserts
+                for (ArrayList<String> row : csvData) {
+                    // Set values based on the structure of your CSV data
+                    preparedStatement.setString(1, row.get(6)); // Assuming OrderID is at index 6
+                    preparedStatement.setString(2, row.get(0)); // Assuming Region is at index 0
+                    preparedStatement.setString(3, row.get(1)); // Assuming Country is at index 1
+                    preparedStatement.setString(4, row.get(2)); // Assuming ItemType is at index 2
+                    preparedStatement.setDate(5, row.get(3)); // Assuming OrderProcessingTime is at the last index - 3
+                    preparedStatement.setString(6, row.get(4)); // Assuming OrderPriority is found by name
+                    preparedStatement.setDouble(7, Double.parseDouble(row.get(row.size() - 1))); // Assuming GrossMargin is at the last index
+
+                    preparedStatement.addBatch();
+                }
+
+                // Execute batch insert
+                preparedStatement.executeBatch();
+
+                // Commit the transaction
+                connection.commit();
+            }
+        }
+
+        // Upload SQLite database file to S3
+        uploadSQLiteToS3(s3Client, databaseFile);
+
+    } catch (ClassNotFoundException | SQLException e) {
+        e.printStackTrace();
+    }
 }
+
+private void createOrdersTable(Connection connection) throws SQLException {
+    try (PreparedStatement preparedStatement = connection.prepareStatement(
+            "CREATE TABLE IF NOT EXISTS Orders (" +
+                    "OrderID TEXT PRIMARY KEY," +
+                    "Region TEXT," +
+                    "Country TEXT," +
+                    "ItemType TEXT," +
+                    "OrderProcessingTime INTEGER," +
+                    "OrderPriority TEXT," +
+                    "GrossMargin REAL)"
+    )) {
+        preparedStatement.executeUpdate();
+    }
+}
+
+
+// ... (Remaining code remains unchanged)
+
+private void uploadSQLiteToS3(AmazonS3 s3Client, File databaseFile) {
+    try {
+        // Upload the SQLite database file to S3
+        byte[] contentBytes = Files.readAllBytes(databaseFile.toPath());
+        ObjectMetadata metadata = new ObjectMetadata();
+        metadata.setContentLength(contentBytes.length);
+
+        PutObjectRequest putObjectRequest = new PutObjectRequest(
+                "your-s3-bucket", // Replace with your actual S3 bucket name
+                "sales.db",
+                new ByteArrayInputStream(contentBytes),
+                metadata
+        );
+
+        PutObjectResult putObjectResult = s3Client.putObject(putObjectRequest);
+        System.out.println("SQLite database written to S3. ETag: " + putObjectResult.getETag());
+
+    } catch (IOException e) {
+        e.printStackTrace();
+    }
+}
+
+}
+
+
+
+
