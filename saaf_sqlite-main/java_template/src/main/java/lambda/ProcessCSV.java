@@ -39,6 +39,7 @@ public class ProcessCSV implements RequestHandler<Request, HashMap<String, Objec
     
         String bucketname;
         String filename;
+        List<ArrayList<String>> csvData;
 
     public HashMap<String, Object> handleRequest(Request request, Context context) {
         
@@ -63,7 +64,7 @@ public class ProcessCSV implements RequestHandler<Request, HashMap<String, Objec
         Scanner scanner = new Scanner(objectData);
      
         
-        List<ArrayList<String>> csvData = new ArrayList<>();
+        csvData = new ArrayList<>();
         
         
         
@@ -80,6 +81,8 @@ public class ProcessCSV implements RequestHandler<Request, HashMap<String, Objec
         writeCsvToS3(s3Client, csvData);
         
         loadIntoSQLite(csvData, s3Client);
+        
+        
 
         // Further processing or storage logic can be added here
 
@@ -275,21 +278,32 @@ private void loadIntoSQLite(List<ArrayList<String>> csvData, AmazonS3 s3Client) 
             createOrdersTable(connection);
 
             try (PreparedStatement preparedStatement = connection.prepareStatement(
-                    "INSERT INTO Orders (OrderID, Region, Country, ItemType, OrderProcessingTime, OrderPriority, GrossMargin) VALUES (?, ?, ?, ?, ?, ?, ?)"
+                    "INSERT INTO Orders (Region, Country, ItemType, SalesChannel, OrderPriority, OrderDate, OrderID, ShipDate, UnitsSold, UnitPrice, UnitCost, TotalRevenue, TotalCost, TotalProfit, OrderProcessingTime, GrossMargin) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
             )) {
                 // Iterate over CSV data and add batch inserts
-                for (ArrayList<String> row : csvData) {
+                for (int i = 1; i < csvData.size(); i++) {
+                    ArrayList<String> row = csvData.get(i);
                     // Set values based on the structure of your CSV data
-                    preparedStatement.setString(1, row.get(6)); // Assuming OrderID is at index 6
-                    preparedStatement.setString(2, row.get(0)); // Assuming Region is at index 0
-                    preparedStatement.setString(3, row.get(1)); // Assuming Country is at index 1
-                    preparedStatement.setString(4, row.get(2)); // Assuming ItemType is at index 2
-                    preparedStatement.setDate(5, row.get(3)); // Assuming OrderProcessingTime is at the last index - 3
-                    preparedStatement.setString(6, row.get(4)); // Assuming OrderPriority is found by name
-                    preparedStatement.setDouble(7, Double.parseDouble(row.get(row.size() - 1))); // Assuming GrossMargin is at the last index
+                    preparedStatement.setString(1, row.get(0)); // Region
+                    preparedStatement.setString(2, row.get(1)); // Country
+                    preparedStatement.setString(3, row.get(2)); // ItemType
+                    preparedStatement.setString(4, row.get(3)); // SalesChannel
+                    preparedStatement.setString(5, row.get(4)); // OrderPriority
+                    preparedStatement.setString(6, row.get(5)); // OrderDate
+                    preparedStatement.setString(7, row.get(6)); // OrderID
+                    preparedStatement.setString(8, row.get(7)); // ShipDate
+                    preparedStatement.setString(9, row.get(8)); // UnitsSold
+                    preparedStatement.setString(10, row.get(9)); // UnitPrice
+                    preparedStatement.setString(11, row.get(10)); // UnitCost
+                    preparedStatement.setString(12, row.get(11)); // TotalRevenue
+                    preparedStatement.setString(13, row.get(12)); // TotalCost
+                    preparedStatement.setString(14, row.get(13)); // TotalProfit
+                    preparedStatement.setString(15, row.get(14)); // OrderProcessingTime
+                    preparedStatement.setString(16, row.get(15)); // GrossMargin
 
                     preparedStatement.addBatch();
-                }
+}
+
 
                 // Execute batch insert
                 preparedStatement.executeBatch();
@@ -301,6 +315,7 @@ private void loadIntoSQLite(List<ArrayList<String>> csvData, AmazonS3 s3Client) 
 
         // Upload SQLite database file to S3
         uploadSQLiteToS3(s3Client, databaseFile);
+        System.out.println("uploadsqlite");
 
     } catch (ClassNotFoundException | SQLException e) {
         e.printStackTrace();
@@ -310,13 +325,22 @@ private void loadIntoSQLite(List<ArrayList<String>> csvData, AmazonS3 s3Client) 
 private void createOrdersTable(Connection connection) throws SQLException {
     try (PreparedStatement preparedStatement = connection.prepareStatement(
             "CREATE TABLE IF NOT EXISTS Orders (" +
-                    "OrderID TEXT PRIMARY KEY," +
                     "Region TEXT," +
                     "Country TEXT," +
                     "ItemType TEXT," +
-                    "OrderProcessingTime INTEGER," +
+                    "SalesChannel TEXT," +
                     "OrderPriority TEXT," +
-                    "GrossMargin REAL)"
+                    "OrderDate TEXT," +
+                    "OrderID TEXT PRIMARY KEY," +
+                    "ShipDate TEXT," +
+                    "UnitsSold TEXT," +
+                    "UnitPrice TEXT," +
+                    "UnitCost TEXT," +
+                    "TotalRevenue TEXT," +
+                    "TotalCost TEXT," +
+                    "TotalProfit TEXT," +
+                    "OrderProcessingTime TEXT," +
+                    "GrossMargin TEXT)"
     )) {
         preparedStatement.executeUpdate();
     }
@@ -333,7 +357,7 @@ private void uploadSQLiteToS3(AmazonS3 s3Client, File databaseFile) {
         metadata.setContentLength(contentBytes.length);
 
         PutObjectRequest putObjectRequest = new PutObjectRequest(
-                "your-s3-bucket", // Replace with your actual S3 bucket name
+                bucketname, // Replace with your actual S3 bucket name
                 "sales.db",
                 new ByteArrayInputStream(contentBytes),
                 metadata
