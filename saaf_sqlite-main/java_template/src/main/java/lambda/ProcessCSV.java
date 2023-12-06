@@ -85,7 +85,10 @@ public class ProcessCSV implements RequestHandler<Request, HashMap<String, Objec
 
     logger.log("ProcessCSV bucketname:" + bucketname + " filename:" + filename);
 
-    inspector.addAttribute(service3Response.keySet() + "", service3Response.values());
+    for (String key : service3Response.keySet()) {
+        inspector.addAttribute(key, service3Response.get(key));
+    }
+
 
     Response response = new Response();
     response.setValue("Bucket: " + bucketname + " filename:" + filename + " processed.");
@@ -338,41 +341,39 @@ private void uploadSQLiteToS3(AmazonS3 s3Client, File databaseFile) {
 }
 
 private Map<String, Object> processService3Request(Request request) {
-        Map<String, Object> response = new HashMap<>();
+    Map<String, Object> response = new HashMap<>();
 
-        // Extract filters and aggregations from the JSON request
-        Map<String, String> filters = request.getFilters();
-        List<String> aggregations = request.getAggregations();
+    // Extract filters and aggregations from the JSON request
+    Map<String, String> filters = request.getFilters();
+    List<String> aggregations = request.getAggregations();
 
-        // Build SQL query dynamically based on filters and aggregations
-        String sql = buildSQLQuery(filters, aggregations);
+    // Build SQL query dynamically based on filters and aggregations
+    String sql = buildSQLQuery(filters, aggregations);
 
-        // Execute the SQL query
-        try (Statement statement = connection.createStatement();
-             ResultSet resultSet = statement.executeQuery(sql)) {
-            // Process the query results and create a response
-            while (resultSet.next()) {
-                // Process each row and create a JSON object for the response
-                String region = resultSet.getString("Region");
-                double avgOrderProcessingTime = resultSet.getDouble("AVG(OrderProcessingTime)");
-                double totalRevenue = resultSet.getDouble("SUM(TotalRevenue)");
+    // Execute the SQL query
+    try (Statement statement = connection.createStatement();
+         ResultSet resultSet = statement.executeQuery(sql)) {
 
-                // Create a JSON object for the response
-                Map<String, Object> responseRow = Map.of(
-                        "Region", region,
-                        "AvgOrderProcessingTime", avgOrderProcessingTime,
-                        "TotalRevenue", totalRevenue
-                );
+        // Process the query results and create a response
+        while (resultSet.next()) {
+            // Process each row and create a JSON object for the response
+    
 
-                // Add the response row to the overall response
-                response.put(region, responseRow);
+            // Process each aggregation and add it to the response map
+            for (String aggregation : aggregations) {
+                // Get the value from the result set using the aggregation name
+                double value = resultSet.getDouble(aggregation);
+                // Add the value to the response map
+                response.put(aggregation, value);
             }
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
 
-        return response;
+        }
+    } catch (SQLException e) {
+        e.printStackTrace();
     }
+
+    return response;
+}
 
     private String buildSQLQuery(Map<String, String> filters, List<String> aggregations) {
         // Build the SQL query dynamically based on filters and aggregations
@@ -388,6 +389,7 @@ private Map<String, Object> processService3Request(Request request) {
         }
         // Remove the trailing "AND"
         sqlBuilder.delete(sqlBuilder.length() - 5, sqlBuilder.length());
+        sqlBuilder.append(";");
 
         return sqlBuilder.toString();
     }  
