@@ -33,6 +33,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Scanner;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVPrinter;
 import saaf.Inspector;
@@ -49,7 +51,6 @@ public class ProcessCSV implements RequestHandler<Request, HashMap<String, Objec
 
     public HashMap<String, Object> handleRequest(Request request, Context context) {
     Inspector inspector = new Inspector();
-    inspector.inspectAll();
     
     bucketname = request.getBucketname();
     filename = request.getFilename();
@@ -76,20 +77,26 @@ public class ProcessCSV implements RequestHandler<Request, HashMap<String, Objec
     transformData(csvData);
     writeCsvToS3(s3Client, csvData);
     loadIntoSQLite(csvData, s3Client);
+    
+    Map<String, Object> service3Response = processService3Request(request);
+    
 
     scanner.close();
 
     logger.log("ProcessCSV bucketname:" + bucketname + " filename:" + filename);
 
-    inspector.addAttribute("message", "Hello " + request.getBucketname() 
-            + "! This is an attribute added to the Inspector!");
+    inspector.addAttribute(service3Response.keySet() + "", service3Response.values());
 
     Response response = new Response();
     response.setValue("Bucket: " + bucketname + " filename:" + filename + " processed.");
-
+    
     inspector.consumeResponse(response);
 
-    inspector.inspectAllDeltas();
+            try {
+                connection.close(); // Close the connection
+            } catch (SQLException ex) {
+                Logger.getLogger(ProcessCSV.class.getName()).log(Level.SEVERE, null, ex);
+            }
     return inspector.finish();
 }
 
@@ -274,7 +281,7 @@ private void loadIntoSQLite(List<ArrayList<String>> csvData, AmazonS3 s3Client) 
             connection.commit();
         }
         
-        connection.close(); // Close the connection
+        
 
         uploadSQLiteToS3(s3Client, databaseFile);
 
@@ -330,12 +337,12 @@ private void uploadSQLiteToS3(AmazonS3 s3Client, File databaseFile) {
     }
 }
 
-public Map<String, Object> processService3Request(Map<String, Object> request) {
+private Map<String, Object> processService3Request(Request request) {
+        Map<String, Object> response = new HashMap<>();
 
-        Map<String, Object> response = new HashMap<String, Object>();
         // Extract filters and aggregations from the JSON request
-        Map<String, String> filters = (Map<String, String>) request.get("filters");
-        List<String> aggregations = (List<String>) request.get("aggregations");
+        Map<String, String> filters = request.getFilters();
+        List<String> aggregations = request.getAggregations();
 
         // Build SQL query dynamically based on filters and aggregations
         String sql = buildSQLQuery(filters, aggregations);
@@ -383,10 +390,7 @@ public Map<String, Object> processService3Request(Map<String, Object> request) {
         sqlBuilder.delete(sqlBuilder.length() - 5, sqlBuilder.length());
 
         return sqlBuilder.toString();
-    }
-    
-    
-
+    }  
 }
 
 
