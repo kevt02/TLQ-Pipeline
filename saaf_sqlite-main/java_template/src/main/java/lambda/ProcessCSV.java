@@ -40,8 +40,8 @@ import saaf.Inspector;
 
 
 public class ProcessCSV implements RequestHandler<Request, HashMap<String, Object>> {
-    
- 
+
+
         Connection connection;
         String bucketname;
         String filename;
@@ -50,20 +50,20 @@ public class ProcessCSV implements RequestHandler<Request, HashMap<String, Objec
     public HashMap<String, Object> handleRequest(Request request, Context context) {
     Inspector inspector = new Inspector();
     inspector.inspectAll();
-    
+
     bucketname = request.getBucketname();
     filename = request.getFilename();
-    
+
     LambdaLogger logger = context.getLogger();
     logger.log("ProcessCSV bucketname:" + bucketname + " filename:" + filename);
-    
+
     AmazonS3 s3Client = AmazonS3ClientBuilder.standard().build();
 
     S3Object s3Object = s3Client.getObject(new GetObjectRequest(bucketname, filename));
     InputStream objectData = s3Object.getObjectContent();
-    
+
     csvData = new ArrayList<>();
-    
+
     Scanner scanner = new Scanner(objectData);
 
     while (scanner.hasNextLine()) {
@@ -81,7 +81,7 @@ public class ProcessCSV implements RequestHandler<Request, HashMap<String, Objec
 
     logger.log("ProcessCSV bucketname:" + bucketname + " filename:" + filename);
 
-    inspector.addAttribute("message", "Hello " + request.getBucketname() 
+    inspector.addAttribute("message", "Hello " + request.getBucketname()
             + "! This is an attribute added to the Inspector!");
 
     Response response = new Response();
@@ -204,7 +204,7 @@ public class ProcessCSV implements RequestHandler<Request, HashMap<String, Objec
         }
         return -1; // Return -1 if the column is not found
     }
-    
+
 //       private void writeCsvToFile(List<ArrayList<String>> csvData, String outputFileName) {
 //        try (FileWriter writer = new FileWriter(outputFileName)) {
 //            for (ArrayList<String> row : csvData) {
@@ -220,7 +220,7 @@ public class ProcessCSV implements RequestHandler<Request, HashMap<String, Objec
 //            e.printStackTrace();
 //        }
 //    }
-    
+
      private void writeCsvToS3(AmazonS3 s3Client, List<ArrayList<String>> csvData) {
         try {
             ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
@@ -247,8 +247,8 @@ public class ProcessCSV implements RequestHandler<Request, HashMap<String, Objec
             e.printStackTrace();
         }
     }
-     
-        
+
+
 
 private void loadIntoSQLite(List<ArrayList<String>> csvData, AmazonS3 s3Client) {
     try {
@@ -291,7 +291,7 @@ private void loadIntoSQLite(List<ArrayList<String>> csvData, AmazonS3 s3Client) 
             preparedStatement.executeBatch();
             connection.commit();
         }
-        
+
         connection.close(); // Close the connection
 
         uploadSQLiteToS3(s3Client, databaseFile);
@@ -352,6 +352,8 @@ private void uploadSQLiteToS3(AmazonS3 s3Client, File databaseFile) {
 
 public Map<String, Object> processService3Request(Map<String, Object> request) {
         // Assume the JSON request structure:
+        // filter = where
+        // Group by = aggregate
         // {"filters": {"Region": "Australia and Oceania"}, "aggregations": ["avg(OrderProcessingTime)", "sum(TotalRevenue)"]}
 
         Map<String, Object> response = new HashMap<String, Object>();
