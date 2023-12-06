@@ -42,63 +42,63 @@ import saaf.Inspector;
 
 
 public class ProcessCSV implements RequestHandler<Request, HashMap<String, Object>> {
-    
- 
-        Connection connection;
-        String bucketname;
-        String filename;
-        List<ArrayList<String>> csvData;
+
+
+    Connection connection;
+    String bucketname;
+    String filename;
+    List<ArrayList<String>> csvData;
 
     public HashMap<String, Object> handleRequest(Request request, Context context) {
-    Inspector inspector = new Inspector();
-    
-    bucketname = request.getBucketname();
-    filename = request.getFilename();
-    
-    LambdaLogger logger = context.getLogger();
-    logger.log("ProcessCSV bucketname:" + bucketname + " filename:" + filename);
-    
-    AmazonS3 s3Client = AmazonS3ClientBuilder.standard().build();
+        Inspector inspector = new Inspector();
 
-    S3Object s3Object = s3Client.getObject(new GetObjectRequest(bucketname, filename));
-    InputStream objectData = s3Object.getObjectContent();
-    
-    csvData = new ArrayList<>();
-    
-    Scanner scanner = new Scanner(objectData);
+        bucketname = request.getBucketname();
+        filename = request.getFilename();
 
-    while (scanner.hasNextLine()) {
-        String line = scanner.nextLine();
-        String[] row = line.split(",");
-        ArrayList<String> list = new ArrayList<>(Arrays.asList(row));
-        csvData.add(list);
+        LambdaLogger logger = context.getLogger();
+        logger.log("ProcessCSV bucketname:" + bucketname + " filename:" + filename);
+
+        AmazonS3 s3Client = AmazonS3ClientBuilder.standard().build();
+
+        S3Object s3Object = s3Client.getObject(new GetObjectRequest(bucketname, filename));
+        InputStream objectData = s3Object.getObjectContent();
+
+        csvData = new ArrayList<>();
+
+        Scanner scanner = new Scanner(objectData);
+
+        while (scanner.hasNextLine()) {
+            String line = scanner.nextLine();
+            String[] row = line.split(",");
+            ArrayList<String> list = new ArrayList<>(Arrays.asList(row));
+            csvData.add(list);
+        }
+
+        transformData(csvData);
+        writeCsvToS3(s3Client, csvData);
+        loadIntoSQLite(csvData, s3Client);
+
+        Map<String, Object> service3Response = processService3Request(request);
+
+
+        scanner.close();
+
+        logger.log("ProcessCSV bucketname:" + bucketname + " filename:" + filename);
+
+        inspector.addAttribute(service3Response.keySet() + "", service3Response.values());
+
+        Response response = new Response();
+        response.setValue("Bucket: " + bucketname + " filename:" + filename + " processed.");
+
+        inspector.consumeResponse(response);
+
+        try {
+            connection.close(); // Close the connection
+        } catch (SQLException ex) {
+            Logger.getLogger(ProcessCSV.class.getName()).log(Level.SEVERE, null, ex);
+        }
+        return inspector.finish();
     }
-
-    transformData(csvData);
-    writeCsvToS3(s3Client, csvData);
-    loadIntoSQLite(csvData, s3Client);
-    
-    Map<String, Object> service3Response = processService3Request(request);
-    
-
-    scanner.close();
-
-    logger.log("ProcessCSV bucketname:" + bucketname + " filename:" + filename);
-
-    inspector.addAttribute(service3Response.keySet() + "", service3Response.values());
-
-    Response response = new Response();
-    response.setValue("Bucket: " + bucketname + " filename:" + filename + " processed.");
-    
-    inspector.consumeResponse(response);
-
-            try {
-                connection.close(); // Close the connection
-            } catch (SQLException ex) {
-                Logger.getLogger(ProcessCSV.class.getName()).log(Level.SEVERE, null, ex);
-            }
-    return inspector.finish();
-}
 
     private void transformData(List<ArrayList<String>> csvData) {
         // Service #1 Transformations
@@ -107,7 +107,7 @@ public class ProcessCSV implements RequestHandler<Request, HashMap<String, Objec
         csvData.get(0).add("Order Processing Time");
         for (int i = 1; i < csvData.size(); i++) {
             String orderDate = csvData.get(i).get(5);
-            String shipDate = csvData.get(i).get(7); 
+            String shipDate = csvData.get(i).get(7);
             // Calculate and add Order Processing Time         
             String orderProcessingTime = calculateOrderProcessingTime(orderDate, shipDate);
             csvData.get(i).add(orderProcessingTime);
@@ -128,7 +128,7 @@ public class ProcessCSV implements RequestHandler<Request, HashMap<String, Objec
         int totalRevenueIndex = getColumnIndex(csvData.get(0), "Total Revenue");
         for (int i = 1; i < csvData.size(); i++) {
             // Calculate and add Gross Margin
-       
+
             String grossMargin = calculateGrossMargin(csvData.get(i).get(totalProfitIndex), csvData.get(i).get(totalRevenueIndex));
             csvData.get(i).add(grossMargin);
         }
@@ -150,21 +150,21 @@ public class ProcessCSV implements RequestHandler<Request, HashMap<String, Objec
     }
 
     private String calculateOrderProcessingTime(String orderDate, String shipDate) {
-    try {
-        SimpleDateFormat dateFormat = new SimpleDateFormat("MM/dd/yyyy");
+        try {
+            SimpleDateFormat dateFormat = new SimpleDateFormat("MM/dd/yyyy");
 
-        Date orderDateObj = dateFormat.parse(orderDate);
-        Date shipDateObj = dateFormat.parse(shipDate);
+            Date orderDateObj = dateFormat.parse(orderDate);
+            Date shipDateObj = dateFormat.parse(shipDate);
 
-        long timeDifference = shipDateObj.getTime() - orderDateObj.getTime();
-        long daysDifference = TimeUnit.MILLISECONDS.toDays(timeDifference);
+            long timeDifference = shipDateObj.getTime() - orderDateObj.getTime();
+            long daysDifference = TimeUnit.MILLISECONDS.toDays(timeDifference);
 
-        return String.valueOf(daysDifference);
-    } catch (ParseException e) {
-        e.printStackTrace();
-        return "";
+            return String.valueOf(daysDifference);
+        } catch (ParseException e) {
+            e.printStackTrace();
+            return "";
+        }
     }
-}
 
 
     private String transformOrderPriority(String orderPriority) {
@@ -208,9 +208,9 @@ public class ProcessCSV implements RequestHandler<Request, HashMap<String, Objec
         }
         return -1; // Return -1 if the column is not found
     }
-    
-    
-     private void writeCsvToS3(AmazonS3 s3Client, List<ArrayList<String>> csvData) {
+
+
+    private void writeCsvToS3(AmazonS3 s3Client, List<ArrayList<String>> csvData) {
         try {
             ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
             try (CSVPrinter csvPrinter = new CSVPrinter(new PrintWriter(outputStream), CSVFormat.DEFAULT)) {
@@ -236,108 +236,108 @@ public class ProcessCSV implements RequestHandler<Request, HashMap<String, Objec
             e.printStackTrace();
         }
     }
-     
-        
 
-private void loadIntoSQLite(List<ArrayList<String>> csvData, AmazonS3 s3Client) {
-    try {
-        File databaseFile = new File("/tmp/sales.db");
 
-        Class.forName("org.sqlite.JDBC");
-        String dbUrl = "jdbc:sqlite:" + databaseFile.getAbsolutePath();
 
-        // Establish the database connection
-        connection = DriverManager.getConnection(dbUrl);
-        connection.setAutoCommit(false);
+    private void loadIntoSQLite(List<ArrayList<String>> csvData, AmazonS3 s3Client) {
+        try {
+            File databaseFile = new File("/tmp/sales.db");
 
-        createOrdersTable(connection);
+            Class.forName("org.sqlite.JDBC");
+            String dbUrl = "jdbc:sqlite:" + databaseFile.getAbsolutePath();
 
-        try (PreparedStatement preparedStatement = connection.prepareStatement(
-                "INSERT INTO Orders (Region, Country, ItemType, SalesChannel, OrderPriority, OrderDate, OrderID, ShipDate, UnitsSold, UnitPrice, UnitCost, TotalRevenue, TotalCost, TotalProfit, OrderProcessingTime, GrossMargin) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-        )) {
-            for (int i = 1; i < csvData.size(); i++) {
-                ArrayList<String> row = csvData.get(i);
-                preparedStatement.setString(1, row.get(0)); // Region
-                preparedStatement.setString(2, row.get(1)); // Country
-                preparedStatement.setString(3, row.get(2)); // ItemType
-                preparedStatement.setString(4, row.get(3)); // SalesChannel
-                preparedStatement.setString(5, row.get(4)); // OrderPriority
-                preparedStatement.setString(6, row.get(5)); // OrderDate
-                preparedStatement.setString(7, row.get(6)); // OrderID
-                preparedStatement.setString(8, row.get(7)); // ShipDate
-                preparedStatement.setString(9, row.get(8)); // UnitsSold
-                preparedStatement.setString(10, row.get(9)); // UnitPrice
-                preparedStatement.setString(11, row.get(10)); // UnitCost
-                preparedStatement.setString(12, row.get(11)); // TotalRevenue
-                preparedStatement.setString(13, row.get(12)); // TotalCost
-                preparedStatement.setString(14, row.get(13)); // TotalProfit
-                preparedStatement.setString(15, row.get(14)); // OrderProcessingTime
-                preparedStatement.setString(16, row.get(15)); // GrossMargin
+            // Establish the database connection
+            connection = DriverManager.getConnection(dbUrl);
+            connection.setAutoCommit(false);
 
-                preparedStatement.addBatch();
+            createOrdersTable(connection);
+
+            try (PreparedStatement preparedStatement = connection.prepareStatement(
+                    "INSERT INTO Orders (Region, Country, ItemType, SalesChannel, OrderPriority, OrderDate, OrderID, ShipDate, UnitsSold, UnitPrice, UnitCost, TotalRevenue, TotalCost, TotalProfit, OrderProcessingTime, GrossMargin) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            )) {
+                for (int i = 1; i < csvData.size(); i++) {
+                    ArrayList<String> row = csvData.get(i);
+                    preparedStatement.setString(1, row.get(0)); // Region
+                    preparedStatement.setString(2, row.get(1)); // Country
+                    preparedStatement.setString(3, row.get(2)); // ItemType
+                    preparedStatement.setString(4, row.get(3)); // SalesChannel
+                    preparedStatement.setString(5, row.get(4)); // OrderPriority
+                    preparedStatement.setString(6, row.get(5)); // OrderDate
+                    preparedStatement.setString(7, row.get(6)); // OrderID
+                    preparedStatement.setString(8, row.get(7)); // ShipDate
+                    preparedStatement.setString(9, row.get(8)); // UnitsSold
+                    preparedStatement.setString(10, row.get(9)); // UnitPrice
+                    preparedStatement.setString(11, row.get(10)); // UnitCost
+                    preparedStatement.setString(12, row.get(11)); // TotalRevenue
+                    preparedStatement.setString(13, row.get(12)); // TotalCost
+                    preparedStatement.setString(14, row.get(13)); // TotalProfit
+                    preparedStatement.setString(15, row.get(14)); // OrderProcessingTime
+                    preparedStatement.setString(16, row.get(15)); // GrossMargin
+
+                    preparedStatement.addBatch();
+                }
+
+                preparedStatement.executeBatch();
+                connection.commit();
             }
 
-            preparedStatement.executeBatch();
-            connection.commit();
+
+
+            uploadSQLiteToS3(s3Client, databaseFile);
+
+        } catch (ClassNotFoundException | SQLException e) {
+            e.printStackTrace();
         }
-        
-        
-
-        uploadSQLiteToS3(s3Client, databaseFile);
-
-    } catch (ClassNotFoundException | SQLException e) {
-        e.printStackTrace();
     }
-}
 
-private void createOrdersTable(Connection connection) throws SQLException {
-    try (PreparedStatement preparedStatement = connection.prepareStatement(
-            "CREATE TABLE IF NOT EXISTS Orders (" +
-                    "Region TEXT," +
-                    "Country TEXT," +
-                    "ItemType TEXT," +
-                    "SalesChannel TEXT," +
-                    "OrderPriority TEXT," +
-                    "OrderDate TEXT," +
-                    "OrderID TEXT PRIMARY KEY," +
-                    "ShipDate TEXT," +
-                    "UnitsSold TEXT," +
-                    "UnitPrice TEXT," +
-                    "UnitCost TEXT," +
-                    "TotalRevenue TEXT," +
-                    "TotalCost TEXT," +
-                    "TotalProfit TEXT," +
-                    "OrderProcessingTime TEXT," +
-                    "GrossMargin TEXT)"
-    )) {
-        preparedStatement.executeUpdate();
+    private void createOrdersTable(Connection connection) throws SQLException {
+        try (PreparedStatement preparedStatement = connection.prepareStatement(
+                "CREATE TABLE IF NOT EXISTS Orders (" +
+                        "Region TEXT," +
+                        "Country TEXT," +
+                        "ItemType TEXT," +
+                        "SalesChannel TEXT," +
+                        "OrderPriority TEXT," +
+                        "OrderDate TEXT," +
+                        "OrderID TEXT PRIMARY KEY," +
+                        "ShipDate TEXT," +
+                        "UnitsSold TEXT," +
+                        "UnitPrice TEXT," +
+                        "UnitCost TEXT," +
+                        "TotalRevenue TEXT," +
+                        "TotalCost TEXT," +
+                        "TotalProfit TEXT," +
+                        "OrderProcessingTime TEXT," +
+                        "GrossMargin TEXT)"
+        )) {
+            preparedStatement.executeUpdate();
+        }
     }
-}
 
 
-private void uploadSQLiteToS3(AmazonS3 s3Client, File databaseFile) {
-    try {
-        // Upload the SQLite database file to S3
-        byte[] contentBytes = Files.readAllBytes(databaseFile.toPath());
-        ObjectMetadata metadata = new ObjectMetadata();
-        metadata.setContentLength(contentBytes.length);
+    private void uploadSQLiteToS3(AmazonS3 s3Client, File databaseFile) {
+        try {
+            // Upload the SQLite database file to S3
+            byte[] contentBytes = Files.readAllBytes(databaseFile.toPath());
+            ObjectMetadata metadata = new ObjectMetadata();
+            metadata.setContentLength(contentBytes.length);
 
-        PutObjectRequest putObjectRequest = new PutObjectRequest(
-                bucketname, // Replace with your actual S3 bucket name
-                "sales.db",
-                new ByteArrayInputStream(contentBytes),
-                metadata
-        );
+            PutObjectRequest putObjectRequest = new PutObjectRequest(
+                    bucketname, // Replace with your actual S3 bucket name
+                    "sales.db",
+                    new ByteArrayInputStream(contentBytes),
+                    metadata
+            );
 
-        PutObjectResult putObjectResult = s3Client.putObject(putObjectRequest);
-        System.out.println("SQLite database written to S3. ETag: " + putObjectResult.getETag());
+            PutObjectResult putObjectResult = s3Client.putObject(putObjectRequest);
+            System.out.println("SQLite database written to S3. ETag: " + putObjectResult.getETag());
 
-    } catch (IOException e) {
-        e.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
-}
 
-private Map<String, Object> processService3Request(Request request) {
+    private Map<String, Object> processService3Request(Request request) {
         Map<String, Object> response = new HashMap<>();
 
         // Extract filters and aggregations from the JSON request
@@ -390,7 +390,7 @@ private Map<String, Object> processService3Request(Request request) {
         sqlBuilder.delete(sqlBuilder.length() - 5, sqlBuilder.length());
 
         return sqlBuilder.toString();
-    }  
+    }
 }
 
 
