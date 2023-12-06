@@ -292,7 +292,6 @@ private void loadIntoSQLite(List<ArrayList<String>> csvData, AmazonS3 s3Client) 
         e.printStackTrace();
     }
 }
-
 private void createOrdersTable(Connection connection) throws SQLException {
     try (PreparedStatement preparedStatement = connection.prepareStatement(
             "CREATE TABLE IF NOT EXISTS Orders (" +
