@@ -99,10 +99,9 @@ public class ProcessCSV implements RequestHandler<Request, HashMap<String, Objec
         // 1. Add column [Order Processing Time]
         csvData.get(0).add("Order Processing Time");
         for (int i = 1; i < csvData.size(); i++) {
-            String orderDate = csvData.get(i).get(5); // Assuming Order Date is at index 5
-            String shipDate = csvData.get(i).get(7); // Assuming Ship Date is at index 7
-            // Calculate and add Order Processing Time
-            // You need to implement the logic to calculate the order processing time based on your date format
+            String orderDate = csvData.get(i).get(5);
+            String shipDate = csvData.get(i).get(7); 
+            // Calculate and add Order Processing Time         
             String orderProcessingTime = calculateOrderProcessingTime(orderDate, shipDate);
             csvData.get(i).add(orderProcessingTime);
         }
@@ -112,7 +111,6 @@ public class ProcessCSV implements RequestHandler<Request, HashMap<String, Objec
         for (int i = 1; i < csvData.size(); i++) {
             String orderPriority = csvData.get(i).get(orderPriorityIndex);
             // Transform order priority as needed
-            // You need to implement the logic to transform order priority
             String transformedOrderPriority = transformOrderPriority(orderPriority);
             csvData.get(i).set(orderPriorityIndex, transformedOrderPriority);
         }
@@ -123,7 +121,7 @@ public class ProcessCSV implements RequestHandler<Request, HashMap<String, Objec
         int totalRevenueIndex = getColumnIndex(csvData.get(0), "Total Revenue");
         for (int i = 1; i < csvData.size(); i++) {
             // Calculate and add Gross Margin
-            // You need to implement the logic to calculate the gross margin based on your data format
+       
             String grossMargin = calculateGrossMargin(csvData.get(i).get(totalProfitIndex), csvData.get(i).get(totalRevenueIndex));
             csvData.get(i).add(grossMargin);
         }
@@ -146,7 +144,6 @@ public class ProcessCSV implements RequestHandler<Request, HashMap<String, Objec
 
     private String calculateOrderProcessingTime(String orderDate, String shipDate) {
     try {
-        // Assuming date format is "MM/dd/yyyy"
         SimpleDateFormat dateFormat = new SimpleDateFormat("MM/dd/yyyy");
 
         Date orderDateObj = dateFormat.parse(orderDate);
@@ -205,21 +202,6 @@ public class ProcessCSV implements RequestHandler<Request, HashMap<String, Objec
         return -1; // Return -1 if the column is not found
     }
     
-//       private void writeCsvToFile(List<ArrayList<String>> csvData, String outputFileName) {
-//        try (FileWriter writer = new FileWriter(outputFileName)) {
-//            for (ArrayList<String> row : csvData) {
-//                StringBuilder csvLine = new StringBuilder();
-//                for (String value : row) {
-//                    csvLine.append(value).append(",");
-//                }
-//                // Remove the trailing comma and write the line to the file
-//                writer.write(csvLine.substring(0, csvLine.length() - 1) + "\n");
-//            }
-//            System.out.println("Data written to " + outputFileName);
-//        } catch (IOException e) {
-//            e.printStackTrace();
-//        }
-//    }
     
      private void writeCsvToS3(AmazonS3 s3Client, List<ArrayList<String>> csvData) {
         try {
@@ -326,8 +308,6 @@ private void createOrdersTable(Connection connection) throws SQLException {
 }
 
 
-// ... (Remaining code remains unchanged)
-
 private void uploadSQLiteToS3(AmazonS3 s3Client, File databaseFile) {
     try {
         // Upload the SQLite database file to S3
@@ -351,8 +331,6 @@ private void uploadSQLiteToS3(AmazonS3 s3Client, File databaseFile) {
 }
 
 public Map<String, Object> processService3Request(Map<String, Object> request) {
-        // Assume the JSON request structure:
-        // {"filters": {"Region": "Australia and Oceania"}, "aggregations": ["avg(OrderProcessingTime)", "sum(TotalRevenue)"]}
 
         Map<String, Object> response = new HashMap<String, Object>();
         // Extract filters and aggregations from the JSON request
@@ -366,7 +344,6 @@ public Map<String, Object> processService3Request(Map<String, Object> request) {
         try (Statement statement = connection.createStatement();
              ResultSet resultSet = statement.executeQuery(sql)) {
             // Process the query results and create a response
-            // You need to adapt this part based on your specific requirements
             while (resultSet.next()) {
                 // Process each row and create a JSON object for the response
                 String region = resultSet.getString("Region");
@@ -378,11 +355,9 @@ public Map<String, Object> processService3Request(Map<String, Object> request) {
                         "Region", region,
                         "AvgOrderProcessingTime", avgOrderProcessingTime,
                         "TotalRevenue", totalRevenue
-                        // Add other aggregations as needed
                 );
 
                 // Add the response row to the overall response
-                // You may want to use a List<Map<String, Object>> for the response structure
                 response.put(region, responseRow);
             }
         } catch (SQLException e) {
@@ -394,7 +369,6 @@ public Map<String, Object> processService3Request(Map<String, Object> request) {
 
     private String buildSQLQuery(Map<String, String> filters, List<String> aggregations) {
         // Build the SQL query dynamically based on filters and aggregations
-        // You need to adapt this part based on your specific requirements
         StringBuilder sqlBuilder = new StringBuilder("SELECT ");
         for (String aggregation : aggregations) {
             sqlBuilder.append(aggregation).append(", ");
@@ -410,6 +384,8 @@ public Map<String, Object> processService3Request(Map<String, Object> request) {
 
         return sqlBuilder.toString();
     }
+    
+    
 
 }
 
