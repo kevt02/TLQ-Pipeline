@@ -341,7 +341,6 @@ private void uploadSQLiteToS3(AmazonS3 s3Client, File databaseFile) {
 
 private Map<String, Object> processService3Request(Request request) {
     Map<String, Object> response = new HashMap<>();
-
     // Extract filters and aggregations from the JSON request
     Map<String, String> filters = request.getFilters();
     List<String> aggregations = request.getAggregations();
