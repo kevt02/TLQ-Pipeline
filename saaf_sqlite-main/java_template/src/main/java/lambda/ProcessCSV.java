@@ -51,7 +51,16 @@ public class ProcessCSV implements RequestHandler<Request, HashMap<String, Objec
 
     public HashMap<String, Object> handleRequest(Request request, Context context) {
     Inspector inspector = new Inspector();
+    inspector.inspectAll();
     
+    try
+        {
+        Thread.sleep(10000);
+        }
+        catch (InterruptedException ie)
+        {
+        System.out.println("Interruption occurred while sleeping...");
+        }
     bucketname = request.getBucketname();
     filename = request.getFilename();
     
@@ -93,7 +102,7 @@ public class ProcessCSV implements RequestHandler<Request, HashMap<String, Objec
     Response response = new Response();
     response.setValue("Bucket: " + bucketname + " filename:" + filename + " processed.");
     
-    inspector.consumeResponse(response);
+//    inspector.consumeResponse(response);
 
             try {
                 connection.close(); // Close the connection
@@ -278,8 +287,11 @@ private void loadIntoSQLite(List<ArrayList<String>> csvData, AmazonS3 s3Client) 
                 preparedStatement.setString(16, row.get(15)); // GrossMargin
 
                 preparedStatement.addBatch();
+                if (i % 1000 == 0) {
+                    preparedStatement.executeBatch();
+                    preparedStatement.clearBatch();
+                }
             }
-
             preparedStatement.executeBatch();
             connection.commit();
         }
