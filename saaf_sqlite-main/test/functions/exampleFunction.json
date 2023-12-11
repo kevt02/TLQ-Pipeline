@@ -1,6 +1,6 @@
 {
-	"function": "helloWorld",
+    "function": "processRecordsARM",
     "platform": "AWS Lambda",
-    "source": "../nodejs_template",
-    "endpoint": ""
+    "source": "../java_template",
+    "endpoint": "https://0zzmuk8kg5.execute-api.us-east-2.amazonaws.com/arm-stage"
 }
