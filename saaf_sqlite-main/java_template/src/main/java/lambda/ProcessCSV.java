@@ -44,10 +44,10 @@ import saaf.Inspector;
 public class ProcessCSV implements RequestHandler<Request, HashMap<String, Object>> {
     
  
-        Connection connection;
-        String bucketname;
-        String filename;
-        List<ArrayList<String>> csvData;
+    Connection connection;
+    String bucketname;
+    String filename;
+    List<ArrayList<String>> csvData;
 
     public HashMap<String, Object> handleRequest(Request request, Context context) {
     Inspector inspector = new Inspector();
