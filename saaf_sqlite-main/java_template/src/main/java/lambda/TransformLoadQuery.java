@@ -41,7 +41,7 @@ import saaf.Inspector;
 
 
 
-public class ProcessCSV implements RequestHandler<Request, HashMap<String, Object>> {
+public class TransformLoadQuery implements RequestHandler<Request, HashMap<String, Object>> {
     
  
     Connection connection;
@@ -107,7 +107,7 @@ public class ProcessCSV implements RequestHandler<Request, HashMap<String, Objec
             try {
                 connection.close(); // Close the connection
             } catch (SQLException ex) {
-                Logger.getLogger(ProcessCSV.class.getName()).log(Level.SEVERE, null, ex);
+                Logger.getLogger(TransformLoadQuery.class.getName()).log(Level.SEVERE, null, ex);
             }
     return inspector.finish();
 }
