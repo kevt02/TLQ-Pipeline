@@ -1,0 +1,6 @@
+{
+    "function": "processRecords",
+    "platform": "AWS Lambda",
+    "source": "../java_template",
+    "endpoint": "https://mcxkv1zqw4.execute-api.us-east-2.amazonaws.com/FirstStageTLQ"
+}
