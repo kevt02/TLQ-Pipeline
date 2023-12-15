@@ -1,7 +1,3 @@
-/*
- * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
- * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
- */
 package lambda;
 
 import com.amazonaws.services.lambda.runtime.Context;
@@ -13,6 +9,7 @@ import com.amazonaws.services.s3.model.ObjectMetadata;
 import com.amazonaws.services.s3.model.PutObjectRequest;
 import com.amazonaws.services.s3.model.PutObjectResult;
 import com.amazonaws.services.s3.model.S3Object;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -31,125 +28,91 @@ import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVPrinter;
 import saaf.Inspector;
 
-/**
- *
- * @author kevint
- */
-public class Transform implements RequestHandler<Request, HashMap<String, Object>> {
-   
-    String bucketname;
-    String filename;
-    List<ArrayList<String>> csvData;
-    AmazonS3 s3Client;
-    
+public class Transform implements RequestHandler<HashMap<String, Object>, HashMap<String, Object>> {
+
+    private AmazonS3 s3Client = AmazonS3ClientBuilder.standard().build();
+
     @Override
-    public HashMap<String, Object> handleRequest(Request request, Context context) {
-          Inspector inspector = new Inspector();
-          inspector.inspectAll();
+    public HashMap<String, Object> handleRequest(HashMap<String, Object> input, Context context) {
+        Inspector inspector = new Inspector();
+        inspector.inspectAll();
 
-          bucketname = request.getBucketname();
-          filename = request.getFilename();
-          csvData = new ArrayList<>();
-          s3Client = AmazonS3ClientBuilder.standard().build();
+        String bucketname = (String) input.get("bucketname");
+        String filename = (String) input.get("filename");
+        List<ArrayList<String>> csvData = downloadCSVFileFromS3(bucketname, filename);
 
-          downloadCSVFileFromS3();
-          transformData(csvData);
-          writeCsvToS3(s3Client, csvData);
+        transformData(csvData);
+        writeCsvToS3(bucketname, csvData);
 
-          return inspector.finish();
-      }
-    
-    private void downloadCSVFileFromS3() {
-          try {
-              // Download the object
+        return inspector.finish();
+    }
 
-              S3Object s3Object = s3Client.getObject(new GetObjectRequest(bucketname, filename));
-              InputStream objectData = s3Object.getObjectContent();
-
-              Scanner scanner = new Scanner(objectData);
-
-              while (scanner.hasNextLine()) {
+    private List<ArrayList<String>> downloadCSVFileFromS3(String bucketname, String filename) {
+        List<ArrayList<String>> csvData = new ArrayList<>();
+        try {
+            S3Object s3Object = s3Client.getObject(new GetObjectRequest(bucketname, filename));
+            InputStream objectData = s3Object.getObjectContent();
+            Scanner scanner = new Scanner(objectData);
+            while (scanner.hasNextLine()) {
                 String line = scanner.nextLine();
                 String[] row = line.split(",");
-                ArrayList<String> list = new ArrayList<>(Arrays.asList(row));
-                csvData.add(list);
-              }
+                csvData.add(new ArrayList<>(Arrays.asList(row)));
+            }
+            objectData.close();
+        } catch (Exception e) {
+            System.out.println("Failed to download the csv");
+            e.printStackTrace();
+        }
+        return csvData;
+    }
 
-
-              // Close the input stream
-              objectData.close();
-          } catch (Exception e) {
-              System.out.println("Failed to download the csv");
-              e.printStackTrace();
-              // Handle exceptions appropriately
-          }
-      }
     private void transformData(List<ArrayList<String>> csvData) {
-        // Service #1 Transformations
-
-        // 1. Add column [Order Processing Time]
         csvData.get(0).add("Order Processing Time");
         for (int i = 1; i < csvData.size(); i++) {
             String orderDate = csvData.get(i).get(5);
-            String shipDate = csvData.get(i).get(7); 
-            // Calculate and add Order Processing Time         
-            String orderProcessingTime = calculateOrderProcessingTime(orderDate, shipDate);
-            csvData.get(i).add(orderProcessingTime);
+            String shipDate = csvData.get(i).get(7);
+            csvData.get(i).add(calculateOrderProcessingTime(orderDate, shipDate));
         }
 
-        // 2. Transform [Order Priority] column
         int orderPriorityIndex = getColumnIndex(csvData.get(0), "Order Priority");
         for (int i = 1; i < csvData.size(); i++) {
             String orderPriority = csvData.get(i).get(orderPriorityIndex);
-            // Transform order priority as needed
-            String transformedOrderPriority = transformOrderPriority(orderPriority);
-            csvData.get(i).set(orderPriorityIndex, transformedOrderPriority);
+            csvData.get(i).set(orderPriorityIndex, transformOrderPriority(orderPriority));
         }
 
-        // 3. Add a [Gross Margin] column
         csvData.get(0).add("Gross Margin");
         int totalProfitIndex = getColumnIndex(csvData.get(0), "Total Profit");
         int totalRevenueIndex = getColumnIndex(csvData.get(0), "Total Revenue");
         for (int i = 1; i < csvData.size(); i++) {
-            // Calculate and add Gross Margin
-       
-            String grossMargin = calculateGrossMargin(csvData.get(i).get(totalProfitIndex), csvData.get(i).get(totalRevenueIndex));
-            csvData.get(i).add(grossMargin);
+            csvData.get(i).add(calculateGrossMargin(csvData.get(i).get(totalProfitIndex), csvData.get(i).get(totalRevenueIndex)));
         }
 
-        // 4. Remove duplicate data identified by [Order ID]
         int orderIDIndex = getColumnIndex(csvData.get(0), "Order ID");
         List<String> processedOrderIDs = new ArrayList<>();
         List<ArrayList<String>> filteredData = new ArrayList<>();
-        for (int i = 0; i < csvData.size(); i++) {
-            String orderID = csvData.get(i).get(orderIDIndex);
+        for (ArrayList<String> row : csvData) {
+            String orderID = row.get(orderIDIndex);
             if (!processedOrderIDs.contains(orderID)) {
                 processedOrderIDs.add(orderID);
-                filteredData.add(csvData.get(i));
+                filteredData.add(row);
             }
         }
-        // Update csvData with filteredData
         csvData.clear();
         csvData.addAll(filteredData);
     }
 
     private String calculateOrderProcessingTime(String orderDate, String shipDate) {
-    try {
-        SimpleDateFormat dateFormat = new SimpleDateFormat("MM/dd/yyyy");
-
-        Date orderDateObj = dateFormat.parse(orderDate);
-        Date shipDateObj = dateFormat.parse(shipDate);
-
-        long timeDifference = shipDateObj.getTime() - orderDateObj.getTime();
-        long daysDifference = TimeUnit.MILLISECONDS.toDays(timeDifference);
-
-        return String.valueOf(daysDifference);
-    } catch (ParseException e) {
-        e.printStackTrace();
-        return "";
+        try {
+            SimpleDateFormat dateFormat = new SimpleDateFormat("MM/dd/yyyy");
+            Date orderDateObj = dateFormat.parse(orderDate);
+            Date shipDateObj = dateFormat.parse(shipDate);
+            long timeDifference = shipDateObj.getTime() - orderDateObj.getTime();
+            return String.valueOf(TimeUnit.MILLISECONDS.toDays(timeDifference));
+        } catch (ParseException e) {
+            e.printStackTrace();
+            return "";
+        }
     }
-}
-
 
     private String transformOrderPriority(String orderPriority) {
         switch (orderPriority) {
@@ -170,13 +133,7 @@ public class Transform implements RequestHandler<Request, HashMap<String, Object
         try {
             double profit = Double.parseDouble(totalProfit);
             double revenue = Double.parseDouble(totalRevenue);
-
-            if (revenue != 0) {
-                double margin = (profit / revenue) * 100; // Calculate as a percentage
-                return String.format("%.2f", margin); // Format to two decimal places
-            } else {
-                return "0.0"; // Handle division by zero
-            }
+            return revenue != 0 ? String.format("%.2f", (profit / revenue) * 100) : "0.0";
         } catch (NumberFormatException e) {
             e.printStackTrace();
             return "";
@@ -184,41 +141,33 @@ public class Transform implements RequestHandler<Request, HashMap<String, Object
     }
 
     private int getColumnIndex(ArrayList<String> header, String columnName) {
-        // Helper method to get the index of a column in the header
         for (int i = 0; i < header.size(); i++) {
             if (header.get(i).equals(columnName)) {
                 return i;
             }
         }
-        return -1; // Return -1 if the column is not found
+        return -1;
     }
-    
-    
-     private void writeCsvToS3(AmazonS3 s3Client, List<ArrayList<String>> csvData) {
+
+    private void writeCsvToS3(String bucketname, List<ArrayList<String>> csvData) {
         try {
             ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-            try (CSVPrinter csvPrinter = new CSVPrinter(new PrintWriter(outputStream), CSVFormat.DEFAULT)) {
-                for (ArrayList<String> row : csvData) {
-                    csvPrinter.printRecord(row);
-                }
+            CSVPrinter csvPrinter = new CSVPrinter(new PrintWriter(outputStream), CSVFormat.DEFAULT);
+            for (ArrayList<String> row : csvData) {
+                csvPrinter.printRecord(row);
             }
+            csvPrinter.close();
 
             byte[] contentBytes = outputStream.toByteArray();
             ObjectMetadata metadata = new ObjectMetadata();
             metadata.setContentLength(contentBytes.length);
 
             PutObjectRequest putObjectRequest = new PutObjectRequest(
-                    bucketname,
-                    "output.csv",
-                    new ByteArrayInputStream(contentBytes),
-                    metadata
-            );
+                    bucketname, "output.csv", new ByteArrayInputStream(contentBytes), metadata);
 
-            PutObjectResult putObjectResult = s3Client.putObject(putObjectRequest);
-            System.out.println("Data written to S3. ETag: " + putObjectResult.getETag());
+            s3Client.putObject(putObjectRequest);
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
-    
 }
