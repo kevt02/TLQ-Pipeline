@@ -217,6 +217,7 @@ public class Transform implements RequestHandler<Request, HashMap<String, Object
             PutObjectResult putObjectResult = s3Client.putObject(putObjectRequest);
             System.out.println("Data written to S3. ETag: " + putObjectResult.getETag());
         } catch (IOException e) {
+            System.out.println("Failed to upload to S3");
             e.printStackTrace();
         }
     }
