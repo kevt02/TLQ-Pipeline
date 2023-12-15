@@ -5,6 +5,7 @@
 package lambda;
 
 import com.amazonaws.services.lambda.runtime.Context;
+import com.amazonaws.services.lambda.runtime.LambdaLogger;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3ClientBuilder;
@@ -38,6 +39,8 @@ public class Query implements RequestHandler<Request, HashMap<String, Object>> {
         inspector.inspectAll();
         
         bucketname = request.getBucketname();
+  
+       
 
         // Download .db file from S3 to /tmp
 //        if (dbFileExists()) {
@@ -47,11 +50,14 @@ public class Query implements RequestHandler<Request, HashMap<String, Object>> {
         downloadDbFileFromS3();  
 
         Map<String, Object> service3Response = processService3Request(request);
+        
+        LambdaLogger logger = context.getLogger();
 
         for (String key : service3Response.keySet()) {
             inspector.addAttribute(key, service3Response.get(key));
+            System.out.println(key + ": " + service3Response.get(key));
         }
-
+        
         return inspector.finish();
     }
         
@@ -92,7 +98,6 @@ public class Query implements RequestHandler<Request, HashMap<String, Object>> {
         // Extract filters and aggregations from the JSON request
         Map<String, String> filters = request.getFilters();
         List<String> aggregations = request.getAggregations();
-
         // Build SQL query dynamically based on filters and aggregations
         String sql = buildSQLQuery(filters, aggregations);
 

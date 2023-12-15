@@ -13,10 +13,12 @@ import com.amazonaws.services.s3.model.ObjectMetadata;
 import com.amazonaws.services.s3.model.PutObjectRequest;
 import com.amazonaws.services.s3.model.PutObjectResult;
 import com.amazonaws.services.s3.model.S3Object;
+import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -25,9 +27,11 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Scanner;
 import saaf.Inspector;
 
 /**
@@ -48,7 +52,7 @@ public class Load implements RequestHandler<Request, HashMap<String, Object>> {
         
         bucketname = request.getBucketname();
         csvData = new ArrayList<>();
-        AmazonS3 s3Client = AmazonS3ClientBuilder.standard().build();
+        s3Client = AmazonS3ClientBuilder.standard().build();
         
         downloadCSVFileFromS3();
         loadIntoSQLite(csvData, s3Client);
@@ -63,10 +67,17 @@ public class Load implements RequestHandler<Request, HashMap<String, Object>> {
             // Download the object
            
 
-            S3Object s3Object = s3Client.getObject(new GetObjectRequest(bucketname, key));
+            S3Object s3Object = s3Client.getObject(new GetObjectRequest("records-462", key));
             InputStream objectData = s3Object.getObjectContent();
             
-            csvData = (List<ArrayList<String>>) objectData;
+            Scanner scanner = new Scanner(objectData);
+
+            while (scanner.hasNextLine()) {
+                String line = scanner.nextLine();
+                String[] row = line.split(",");
+                ArrayList<String> list = new ArrayList<>(Arrays.asList(row));
+                csvData.add(list);
+              }
             
             // Close the input stream
             objectData.close();
@@ -173,6 +184,7 @@ public class Load implements RequestHandler<Request, HashMap<String, Object>> {
             System.out.println("SQLite database written to S3. ETag: " + putObjectResult.getETag());
 
         } catch (IOException e) {
+            System.out.println("Failed to upload to S3");
             e.printStackTrace();
         }
     }

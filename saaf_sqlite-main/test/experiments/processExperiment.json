@@ -5,15 +5,15 @@
       "bucketname": "records-462"
     },
     "payloads": [
-	{"filename": "1000SalesRecords.csv",
+	{"filename": "100SalesRecords.csv",
   	 "filters": {
    	 "Region": "Asia"},
   	 "aggregations": ["avg(OrderProcessingTime)", "avg(GrossMargin)"]
 	}
     ],
 
-"runs": 100,
-"threads": 100,
+"runs": 10,
+"threads": 10,
 "iterations": 1,
 "sleepTime": 5,
 "randomSeed": 42,

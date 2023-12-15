@@ -246,6 +246,7 @@ public class Transform implements RequestHandler<HashMap<String, Object>, HashMa
 
             s3Client.putObject(putObjectRequest);
         } catch (IOException e) {
+            System.out.println("Failed to upload to S3");
             e.printStackTrace();
         }
     }
