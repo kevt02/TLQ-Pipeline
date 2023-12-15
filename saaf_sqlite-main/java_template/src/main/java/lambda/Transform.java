@@ -1,3 +1,10 @@
+/**
+ * AWS Lambda function receives a sales csv file and transforms the columns and sends it to S3. 
+ *
+ * This class implements the RequestHandler interface for handling Lambda function requests.
+ *
+* @author Ingeun Hwang, Karandeep Sangha, Kevin Truong, Khin Win
+ */
 package lambda;
 
 import com.amazonaws.services.lambda.runtime.Context;

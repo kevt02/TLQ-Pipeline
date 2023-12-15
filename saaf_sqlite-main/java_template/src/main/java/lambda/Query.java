@@ -1,6 +1,10 @@
-/*
- * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
- * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
+/**
+ * AWS Lambda function for querying an SQLite database based on specified filters and aggregations,
+ * and processing the results to generate a response.
+ *
+ * This class implements the RequestHandler interface for handling Lambda function requests.
+ *
+* @author Ingeun Hwang, Karandeep Sangha, Kevin Truong, Khin Win
  */
 package lambda;
 
@@ -24,49 +28,45 @@ import java.util.Map;
 import saaf.Inspector;
 
 /**
- *
- * @author kevint
+ * AWS Lambda function implementation.
  */
 public class Query implements RequestHandler<Request, HashMap<String, Object>> {
-    
-    
+
+    // Instance variables
     Connection connection;
     String bucketname;
-    
+
+    /**
+     * Handles Lambda function requests.
+     *
+     * @param request The request object containing necessary parameters.
+     * @param context The Lambda execution environment context.
+     * @return A HashMap containing information for AWS Lambda Inspector.
+     */
     @Override
-        public HashMap<String, Object> handleRequest(Request request, Context context) {
+    public HashMap<String, Object> handleRequest(Request request, Context context) {
         Inspector inspector = new Inspector();
         inspector.inspectAll();
-        
-        bucketname = request.getBucketname();
-  
-       
 
-        // Download .db file from S3 to /tmp
-//        if (dbFileExists()) {
-//            downloadDbFileFromS3();    
-//        }
-        
-        downloadDbFileFromS3();  
+        bucketname = request.getBucketname();
+
+        downloadDbFileFromS3();
 
         Map<String, Object> service3Response = processService3Request(request);
-        
+
         LambdaLogger logger = context.getLogger();
 
         for (String key : service3Response.keySet()) {
             inspector.addAttribute(key, service3Response.get(key));
             System.out.println(key + ": " + service3Response.get(key));
         }
-        
+
         return inspector.finish();
     }
-        
-        
-    private boolean dbFileExists() {
-        java.nio.file.Path dbFilePath = java.nio.file.Paths.get("/tmp/sales.db");
-        return java.nio.file.Files.exists(dbFilePath);
-    }
 
+    /**
+     * Downloads the SQLite database file from the specified S3 bucket and saves it to /tmp directory.
+     */
     private void downloadDbFileFromS3() {
         String key = "sales.db";
 
@@ -90,9 +90,14 @@ public class Query implements RequestHandler<Request, HashMap<String, Object>> {
             e.printStackTrace();
             // Handle exceptions appropriately
         }
-}
+    }
 
-    
+    /**
+     * Processes the Service 3 request by executing the SQL query and generating a response.
+     *
+     * @param request The request object containing filters and aggregations.
+     * @return A map containing the response with aggregated values.
+     */
     private Map<String, Object> processService3Request(Request request) {
         Map<String, Object> response = new HashMap<>();
         // Extract filters and aggregations from the JSON request
@@ -102,7 +107,7 @@ public class Query implements RequestHandler<Request, HashMap<String, Object>> {
         String sql = buildSQLQuery(filters, aggregations);
 
         // Execute the SQL query
-        
+
         try {
             File databaseFile = new File("/tmp/sales.db");
 
@@ -118,7 +123,6 @@ public class Query implements RequestHandler<Request, HashMap<String, Object>> {
                 // Process the query results and create a response
                 while (resultSet.next()) {
                     // Process each row and create a JSON object for the response
-
 
                     // Process each aggregation and add it to the response map
                     for (String aggregation : aggregations) {
@@ -136,8 +140,15 @@ public class Query implements RequestHandler<Request, HashMap<String, Object>> {
         }
 
         return response;
-}
+    }
 
+    /**
+     * Builds the SQL query dynamically based on filters and aggregations.
+     *
+     * @param filters      The map containing filters.
+     * @param aggregations The list containing aggregations.
+     * @return The dynamically generated SQL query.
+     */
     private String buildSQLQuery(Map<String, String> filters, List<String> aggregations) {
         // Build the SQL query dynamically based on filters and aggregations
         StringBuilder sqlBuilder = new StringBuilder("SELECT ");
@@ -155,7 +166,6 @@ public class Query implements RequestHandler<Request, HashMap<String, Object>> {
         sqlBuilder.append(";");
 
         return sqlBuilder.toString();
-    }  
+    }
 
-    
 }
