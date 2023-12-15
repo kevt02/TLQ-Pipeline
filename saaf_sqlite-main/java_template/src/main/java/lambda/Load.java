@@ -67,7 +67,7 @@ public class Load implements RequestHandler<Request, HashMap<String, Object>> {
             // Download the object
            
 
-            S3Object s3Object = s3Client.getObject(new GetObjectRequest("records-462", key));
+            S3Object s3Object = s3Client.getObject(new GetObjectRequest(bucketname, key));
             InputStream objectData = s3Object.getObjectContent();
             
             Scanner scanner = new Scanner(objectData);
