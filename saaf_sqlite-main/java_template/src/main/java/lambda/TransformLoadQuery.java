@@ -1,3 +1,9 @@
+/**
+ * AWS Lambda function for a single TLQ function that transforms, loads, and queries. 
+ * This class implements the RequestHandler interface for handling Lambda function requests.
+ *
+* @author Ingeun Hwang, Karandeep Sangha, Kevin Truong, Khin Win
+ */
 package lambda;
 
 import com.amazonaws.services.lambda.runtime.Context;
@@ -39,7 +45,12 @@ import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVPrinter;
 import saaf.Inspector;
 
-
+/**
+ * The {@code TransformLoadQuery} class is responsible for handling requests
+ * to process CSV data from an S3 bucket, transform the data, and load it into
+ * an SQLite database. It implements the {@link RequestHandler} interface
+ * to handle AWS Lambda function requests.
+ */
 
 public class TransformLoadQuery implements RequestHandler<Request, HashMap<String, Object>> {
     
@@ -112,6 +123,14 @@ public class TransformLoadQuery implements RequestHandler<Request, HashMap<Strin
     return inspector.finish();
 }
 
+/**
+ * Transforms the CSV data by adding new columns, changing values, and removing duplicates.
+ * It adds columns like 'Order Processing Time' and 'Gross Margin', transforms 'Order Priority',
+ * and filters out duplicate entries based on 'Order ID'.
+ *
+ * @param csvData The CSV data as a list of rows, where each row is a list of strings.
+ */
+
     private void transformData(List<ArrayList<String>> csvData) {
         // Service #1 Transformations
 
@@ -161,6 +180,18 @@ public class TransformLoadQuery implements RequestHandler<Request, HashMap<Strin
         csvData.addAll(filteredData);
     }
 
+    /**
+ * Calculates the number of days between the order date and the ship date.
+ * Both dates are provided in the format "MM/dd/yyyy". This method parses the 
+ * string dates into {@link Date} objects and computes the difference in days.
+ *
+ * @param orderDate The date when the order was placed, in "MM/dd/yyyy" format.
+ * @param shipDate  The date when the order was shipped, in "MM/dd/yyyy" format.
+ * @return The number of days between the order date and ship date as a string. 
+ *         Returns an empty string if there is a parsing error.
+ * @throws ParseException if the string dates cannot be parsed into valid dates.
+ */
+
     private String calculateOrderProcessingTime(String orderDate, String shipDate) {
     try {
         SimpleDateFormat dateFormat = new SimpleDateFormat("MM/dd/yyyy");
@@ -177,6 +208,15 @@ public class TransformLoadQuery implements RequestHandler<Request, HashMap<Strin
         return "";
     }
 }
+    
+    /**
+ * Transforms a shorthand order priority into a more descriptive format.
+ * Accepts a single-character priority indicator ('L', 'M', 'H', 'C') and converts it
+ * into its full descriptive form.
+ *
+ * @param orderPriority The shorthand order priority (e.g., 'L', 'M', 'H', 'C').
+ * @return The transformed order priority as a full word ('Low', 'Medium', 'High', 'Critical').
+ */
 
 
     private String transformOrderPriority(String orderPriority) {
@@ -193,6 +233,16 @@ public class TransformLoadQuery implements RequestHandler<Request, HashMap<Strin
                 return orderPriority;
         }
     }
+   
+   /**
+ * Calculates the gross margin as a percentage based on total profit and total revenue.
+ * The gross margin is computed as (profit / revenue) * 100.
+ *
+ * @param totalProfit  The total profit in string format.
+ * @param totalRevenue The total revenue in string format.
+ * @return The calculated gross margin as a percentage to two decimal places, or "0.0" if revenue is zero.
+ * @throws NumberFormatException if the input strings are not valid numbers.
+ */
 
     private String calculateGrossMargin(String totalProfit, String totalRevenue) {
         try {
@@ -220,6 +270,15 @@ public class TransformLoadQuery implements RequestHandler<Request, HashMap<Strin
         }
         return -1; // Return -1 if the column is not found
     }
+
+    /**
+ * Retrieves the index of a specified column name in a CSV file header.
+ * Iterates through the header row to find the matching column name.
+ *
+ * @param header     The header row of the CSV file as a list of strings.
+ * @param columnName The name of the column to find.
+ * @return The index of the column, or -1 if the column name is not found.
+ */
     
     
      private void writeCsvToS3(AmazonS3 s3Client, List<ArrayList<String>> csvData) {
@@ -248,10 +307,19 @@ public class TransformLoadQuery implements RequestHandler<Request, HashMap<Strin
             e.printStackTrace();
         }
     }
-     
-        
 
-private void loadIntoSQLite(List<ArrayList<String>> csvData, AmazonS3 s3Client) {
+/**
+ * Loads the provided CSV data into an SQLite database.
+ * Establishes a connection to the SQLite database, creates the necessary table,
+ * and inserts the CSV data into the database.
+ *
+ * @param csvData  The CSV data to load into the database.
+ * @param s3Client The AmazonS3 client instance, used for uploading the database.
+ * @throws ClassNotFoundException if the SQLite JDBC driver class is not found.
+ * @throws SQLException if there is an error establishing a database connection or executing SQL commands.
+ */
+     
+    private void loadIntoSQLite(List<ArrayList<String>> csvData, AmazonS3 s3Client) {
     try {
         File databaseFile = new File("/tmp/sales.db");
 
@@ -304,6 +372,14 @@ private void loadIntoSQLite(List<ArrayList<String>> csvData, AmazonS3 s3Client) 
         e.printStackTrace();
     }
 }
+
+/**
+ * Creates the 'Orders' table in the SQLite database if it does not already exist.
+ * Defines the structure of the table with appropriate columns.
+ *
+ * @param connection The connection to the SQLite database.
+ * @throws SQLException if there is an error executing the table creation SQL command.
+ */
 private void createOrdersTable(Connection connection) throws SQLException {
     try (PreparedStatement preparedStatement = connection.prepareStatement(
             "CREATE TABLE IF NOT EXISTS Orders (" +
@@ -328,6 +404,15 @@ private void createOrdersTable(Connection connection) throws SQLException {
     }
 }
 
+/**
+ * Uploads an SQLite database file to an S3 bucket.
+ * Reads the database file from the local file system and uploads it to the specified S3 bucket.
+ *
+ * @param s3Client     The AmazonS3 client instance to use for uploading.
+ * @param databaseFile The file object representing the SQLite database.
+ * @throws IOException if there is an error reading the database file or uploading it.
+ */
+
 
 private void uploadSQLiteToS3(AmazonS3 s3Client, File databaseFile) {
     try {
@@ -350,6 +435,16 @@ private void uploadSQLiteToS3(AmazonS3 s3Client, File databaseFile) {
         e.printStackTrace();
     }
 }
+
+/**
+ * Processes a request for Service3, applying filters and aggregations to the data.
+ * Builds and executes a SQL query based on the provided filters and aggregations, 
+ * then constructs a response map from the query results.
+ *
+ * @param request The request containing filters and aggregations for the query.
+ * @return A map containing the results of the executed SQL query.
+ * @throws SQLException if there is an error executing the SQL query.
+ */
 
 private Map<String, Object> processService3Request(Request request) {
     Map<String, Object> response = new HashMap<>();
@@ -384,6 +479,15 @@ private Map<String, Object> processService3Request(Request request) {
 
     return response;
 }
+
+/**
+ * Dynamically builds an SQL query based on provided filters and aggregations.
+ * Constructs a SELECT query with conditions and aggregation functions as specified in the request.
+ *
+ * @param filters      A map of filters to apply in the WHERE clause of the query.
+ * @param aggregations A list of aggregation functions to include in the SELECT clause.
+ * @return The constructed SQL query as a string.
+ */
 
     private String buildSQLQuery(Map<String, String> filters, List<String> aggregations) {
         // Build the SQL query dynamically based on filters and aggregations
